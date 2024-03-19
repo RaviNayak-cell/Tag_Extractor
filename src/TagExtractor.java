@@ -3,147 +3,165 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.*;
-import java.nio.Buffer;
 import java.util.*;
+import java.util.Map.Entry;
 
-public class TagExtractor extends JFrame {
+class TagExtractor extends JFrame {
     private JTextArea textArea;
-    private JButton openFileButton;
-    private JButton openStopWordButton;
+    private JScrollPane scrollPane;
+    private JButton selectTextFileButton;
+    private JButton selectStopWordsButton;
     private JButton extractTagsButton;
     private JButton saveTagsButton;
-    private File selectedFile;
+
+    private File selectedTextFile;
     private Set<String> stopWords;
-    private Map<String, Integer> tagFrequency;
+    private Map<String, Integer> tagFrequencyMap;
 
-    public TagExtractor () {
-
+    public TagExtractor() {
         setTitle("Tag Extractor");
-        setSize(400,400);
-        setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        setSize(600, 400);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
 
-        textArea = new JTextArea(10,40);
-        JScrollPane scrollPane = new JScrollPane(textArea);
-        openFileButton = new JButton("Open Text File");
-        openStopWordButton = new JButton("Open Stop Words File");
+        textArea = new JTextArea(20, 40);
+        scrollPane = new JScrollPane(textArea);
+        selectTextFileButton = new JButton("Select Text File");
+        selectStopWordsButton = new JButton("Select Stop Words File");
         extractTagsButton = new JButton("Extract Tags");
         saveTagsButton = new JButton("Save Tags");
 
-        openFileButton.addActionListener(new ActionListener() {
+        selectTextFileButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                JFileChooser fileChooser = new JFileChooser();
-                int result = fileChooser.showOpenDialog(null);
-                if (result == JFileChooser.APPROVE_OPTION){
-                    selectedFile = fileChooser.getSelectedFile();
-                    textArea.setText("File Selected" + selectedFile.getName());
-                }
+                selectTextFile();
             }
         });
 
-        openStopWordButton.addActionListener(new ActionListener() {
+        selectStopWordsButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                JFileChooser fileChooser = new JFileChooser();
-                int result = fileChooser.showOpenDialog(null);
-                if (result == JFileChooser.APPROVE_OPTION){
-                    File stopWordsFile = fileChooser.getSelectedFile();
-                    stopWords = loadStopWordsFromFile(stopWordsFile);
-                    textArea.setText("Stop Words Loaded");
-                }
+                selectStopWordsFile();
             }
         });
 
         extractTagsButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                if (selectedFile == null || stopWords == null){
-                    textArea.setText("Please select a text file and load stop words file.");
-                    return;
-                }
-                tagFrequency = extractTags(selectedFile, stopWords);
-                displayTagFrequency(tagFrequency);
+                extractTags();
             }
         });
 
         saveTagsButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                if (tagFrequency == null){
-                    textArea.setText("No tags to save. Please extract tags first.");
-                    return;
-                }
-                JFileChooser fileChooser = new JFileChooser();
-                int result = fileChooser.showSaveDialog(null);
-                if (result == JFileChooser.APPROVE_OPTION){
-                    File outputFile = fileChooser.getSelectedFile();
-                    saveTagsToFile(outputFile, tagFrequency);
-                    textArea.append("\nTags saved to:" + outputFile.getName());
-                }
+                saveTags();
             }
         });
 
-        JPanel panel = new JPanel();
-        panel.add(openFileButton);
-        panel.add(openStopWordButton);
-        panel.add(extractTagsButton);
-        panel.add(saveTagsButton);
+        // Create the layout and add components
+        JPanel buttonPanel = new JPanel();
+        buttonPanel.add(selectTextFileButton);
+        buttonPanel.add(selectStopWordsButton);
+        buttonPanel.add(extractTagsButton);
+        buttonPanel.add(saveTagsButton);
 
         Container contentPane = getContentPane();
+        contentPane.setLayout(new BorderLayout());
+        contentPane.add(buttonPanel, BorderLayout.NORTH);
         contentPane.add(scrollPane, BorderLayout.CENTER);
-        contentPane.add(panel, BorderLayout.SOUTH);
-
     }
 
-    private Set<String> loadStopWordsFromFile(File stopWordsFile) {
-        Set<String> stopWords = new HashSet<>();
-        try(BufferedReader reader = new BufferedReader(new FileReader(stopWordsFile))) {
+    private void selectTextFile() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        int result = fileChooser.showOpenDialog(this);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            selectedTextFile = fileChooser.getSelectedFile();
+            textArea.setText("Selected Text File: " + selectedTextFile.getName() + "\n");
+        }
+    }
+
+    private void selectStopWordsFile() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        int result = fileChooser.showOpenDialog(this);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File stopWordsFile = fileChooser.getSelectedFile();
+            stopWords = loadStopWords(stopWordsFile);
+            textArea.append("Selected Stop Words File: " + stopWordsFile.getName() + "\n");
+        }
+    }
+
+    private Set<String> loadStopWords(File stopWordsFile) {
+        Set<String> stopWordsSet = new HashSet<>();
+        try (BufferedReader reader = new BufferedReader(new FileReader(stopWordsFile))) {
             String line;
-            while((line = reader.readLine()) != null){
-                stopWords.add(line.toLowerCase());
+            while ((line = reader.readLine()) != null) {
+                stopWordsSet.add(line.toLowerCase());
             }
-        }catch (IOException e){
+        } catch (IOException e) {
+            JOptionPane.showMessageDialog(this, "Error loading stop words file.");
             e.printStackTrace();
         }
-        return stopWords;
+        return stopWordsSet;
     }
 
-    private Map<String, Integer> extractTags(File textFile, Set<String> stopWords) {
-        Map<String, Integer> tagFrequency = new HashMap<>();
-        try(BufferedReader reader = new BufferedReader(new FileReader(textFile))){
+    private void extractTags() {
+        if (selectedTextFile == null) {
+            JOptionPane.showMessageDialog(this, "Please select a text file first.");
+            return;
+        }
+
+        if (stopWords == null) {
+            JOptionPane.showMessageDialog(this, "Please select a stop words file first.");
+            return;
+        }
+
+        tagFrequencyMap = new HashMap<>();
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(selectedTextFile))) {
             String line;
-            while ((line = reader.readLine()) != null){
+            while ((line = reader.readLine()) != null) {
                 String[] words = line.split("\\s+");
-                for (String word : words){
-                    word = word.toLowerCase().replaceAll("[^a-z]" , "");
-                    if (!word.isEmpty() && !stopWords.contains(word)) {
-                        tagFrequency.put(word, tagFrequency.getOrDefault(word, 0) + 1);
+                for (String word : words) {
+                    word = word.replaceAll("[^a-zA-Z]", "").toLowerCase();
+                    if (!stopWords.contains(word)) {
+                        tagFrequencyMap.put(word, tagFrequencyMap.getOrDefault(word, 0) + 1);
                     }
                 }
             }
         } catch (IOException e) {
+            JOptionPane.showMessageDialog(this, "Error processing the text file.");
             e.printStackTrace();
         }
-        return tagFrequency;
+
+        displayTags();
     }
 
-    private void displayTagFrequency(Map<String, Integer> tagFrequency){
-        textArea.setText("Tags and Frequencies:\n");
-        for (Map.Entry<String, Integer> entry : tagFrequency.entrySet()) {
-            textArea.append(entry.getKey() + ": " + entry.getValue() + "\n");
+    private void displayTags() {
+        textArea.append("\nTags and Frequencies:\n");
+
+        for (Entry<String, Integer> entry : tagFrequencyMap.entrySet()) {
+            textArea.append(entry.getKey() + " : " + entry.getValue() + "\n");
         }
     }
 
-    private void saveTagsToFile(File outputFile, Map<String, Integer> tagFrequency) {
-        try(BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile))) {
-            for (Map.Entry<String, Integer> entry : tagFrequency.entrySet()){
-                writer.write(entry.getKey() + ": " + entry.getValue());
-                writer.newLine();
+    private void saveTags() {
+        JFileChooser fileChooser = new JFileChooser();
+        fileChooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
+        int result = fileChooser.showSaveDialog(this);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File outputFile = fileChooser.getSelectedFile();
+            try (PrintWriter writer = new PrintWriter(outputFile)) {
+                for (Entry<String, Integer> entry : tagFrequencyMap.entrySet()) {
+                    writer.println(entry.getKey() + " : " + entry.getValue());
+                }
+                textArea.append("\nTags saved to: " + outputFile.getName() + "\n");
+            } catch (IOException e) {
+                JOptionPane.showMessageDialog(this, "Error saving tags to a file.");
+                e.printStackTrace();
             }
-        }catch (IOException e){
-            e.printStackTrace();
         }
     }
-
 }
 
